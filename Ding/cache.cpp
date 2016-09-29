@@ -61,13 +61,15 @@ void Memory::WRITE( address a, CacheLine& line )
 
 // constructor
 //128 slots in the cache
-Cache::Cache(Memory* mem)
+Cache::Cache(Memory* mem, int size, int Nway, int SetMask, Cache* c)
 {
-	slot = new CacheLine*[L1CACHESIZE / SLOTSIZE / NWAY];
-	for (int i = 0; i < L1CACHESIZE / SLOTSIZE / NWAY; i++) // 32
+	setMask = SetMask;
+	nway = Nway;
+	slot = new CacheLine*[size / SLOTSIZE / nway];
+	for (int i = 0; i < size / SLOTSIZE / nway; i++)
 	{
-		slot[i] = new CacheLine[NWAY];
-		for (int j = 0; j < NWAY; j++)
+		slot[i] = new CacheLine[nway];
+		for (int j = 0; j < nway; j++)
 		{
 			for (int t = 0; t < SLOTSIZE; t++)
 				slot[i][j].value[t] = 0;
@@ -75,6 +77,7 @@ Cache::Cache(Memory* mem)
 	   // memset(slot[i], 0, NWAY);
 	}
 	memory = mem;
+	nextCache = c;
 	hits = misses = totalCost = 0;
 }
 
@@ -85,11 +88,10 @@ Cache::~Cache()
 }
 
 // read a single byte from memory
-// TODO: minimize calls to memory->READ using caching
 byte Cache::READ( address a )
 {
-	int n = (a & SETMASK) >> 6;
-	for (int i = 0; i < NWAY; i++)
+	int n = (a & setMask) >> 6;
+	for (int i = 0; i < nway; i++)
 	{
 			slot[n][i].age++; //LRU
 		if ((slot[n][i].tag & ADDRESSMASK) == (a & ADDRESSMASK))
@@ -100,12 +102,18 @@ byte Cache::READ( address a )
 			return slot[n][i].value[a & OFFSETMASK];
 		}
 	}
-	//if (test != ding)
-	//	int blabla = 5;
-	// request a full line from memory
-	CacheLine line = memory->READ( a & ADDRESSMASK );
-	// return the requested byte
-	byte returnValue = line.value[a & OFFSETMASK];
+
+	// Read from next cache if exists, otherwise from memory
+	CacheLine line;
+	byte returnValue;
+	if (nextCache)
+		returnValue = nextCache->READ(a);
+	else //read from memory
+	{
+		line = memory->READ(a & ADDRESSMASK);
+		returnValue = line.value[a & OFFSETMASK];
+	}
+
 	WRITE(a, returnValue);
 
 	// update memory access cost
@@ -114,16 +122,47 @@ byte Cache::READ( address a )
 	return returnValue;
 }
 
+//read an entire cacheline from cache
+CacheLine Cache::READLINE(address a)
+{
+	int n = (a & setMask) >> 6;
+	for (int i = 0; i < nway; i++)
+	{
+		slot[n][i].age++; //LRU
+		if ((slot[n][i].tag & ADDRESSMASK) == (a & ADDRESSMASK))
+		{
+			totalCost += L1ACCESSCOST; hits++;
+			slot[n][i].age = 0; //LRU
+			slot[n][i].n_uses++; //LFU
+			return slot[n][i];
+		}
+	}
+
+	// Read from next cache if exists, otherwise from memory
+	CacheLine line;
+	if (nextCache)
+		line = nextCache->READLINE(a);
+	else
+		line = memory->READ(a & ADDRESSMASK);
+
+	WRITELINE(a, line);
+
+	// update memory access cost
+	totalCost += RAMACCESSCOST;	// TODO: replace by L1ACCESSCOST for a hit
+	misses++;					// TODO: replace by hits++ for a hit
+	return line;
+}
+
 // write a single byte to memory
 // TODO: minimize calls to memory->WRITE using caching
 void Cache::WRITE(address a, byte value)
 {
-	int n = (a & SETMASK) >> 6;
+	int n = (a & setMask) >> 6;
 
-	for (int i = 0; i < NWAY; i++)
+	for (int i = 0; i < nway; i++)
 		slot[n][i].age++; //LRU
 
-	for (int i = 0; i < NWAY; i++)
+	for (int i = 0; i < nway; i++)
 	{
 		if (slot[n][i].valid){
 			if ((slot[n][i].tag & ADDRESSMASK) == (a & ADDRESSMASK))
@@ -138,7 +177,7 @@ void Cache::WRITE(address a, byte value)
 		}
 	}
 
-	for (int i = 0; i < NWAY; i++)
+	for (int i = 0; i < nway; i++)
 	{
 		if (!slot[n][i].valid){
 			slot[n][i].tag = a;
@@ -154,13 +193,20 @@ void Cache::WRITE(address a, byte value)
 
 	int z = EVICTION(n);
 
-	// request a full line from memory
-	CacheLine line = memory->READ(a & ADDRESSMASK);
+	// request a full line from memory/cache
+	CacheLine line;
+	if (nextCache)
+		line = nextCache->READLINE(a & ADDRESSMASK);
+	else
+		line = memory->READ(a & ADDRESSMASK);
 
 	if (slot[n][z].dirty)
 	{
-		// write the line back to memory
-		memory->WRITE(slot[n][z].tag & ADDRESSMASK, slot[n][z]);
+		// write the line back to memory or next cache
+		if (nextCache)
+			nextCache->WRITELINE(slot[n][z].tag & ADDRESSMASK, slot[n][z]);
+		else
+			memory->WRITE(slot[n][z].tag & ADDRESSMASK, slot[n][z]);
 		// update memory access cost
 	}
 
@@ -178,6 +224,74 @@ void Cache::WRITE(address a, byte value)
 	return;
 }
 
+//write an entire line to cache
+void Cache::WRITELINE(address a, CacheLine& line)
+{
+	int n = (a & setMask) >> 6;
+	for (int i = 0; i < nway; i++)
+		slot[n][i].age++; //LRU
+
+	for (int i = 0; i < nway; i++)
+	{
+		if (slot[n][i].valid){
+			if ((slot[n][i].tag & ADDRESSMASK) == (a & ADDRESSMASK))
+			{
+				slot[n][i] = line;
+				slot[n][i].dirty = true;
+				totalCost += L1ACCESSCOST; hits++;
+				slot[n][i].age = 0; //LRU
+				slot[n][i].n_uses++; //LFU
+				return;
+			}
+		}
+	}
+
+	for (int i = 0; i < nway; i++)
+	{
+		if (!slot[n][i].valid){
+			slot[n][i] = line;
+			slot[n][i].tag = a;
+			slot[n][i].valid = true;
+			slot[n][i].dirty = true;
+			totalCost += L1ACCESSCOST; hits++;
+			slot[n][i].age = 0; //LRU
+			slot[n][i].n_uses++; //LFU
+			return;
+		}
+	}
+
+	int z = EVICTION(n);
+
+	// request a full line from memory/cache
+	CacheLine line;
+	if (nextCache)
+		line = nextCache->READLINE(a & ADDRESSMASK);
+	else
+		line = memory->READ(a & ADDRESSMASK);
+
+	if (slot[n][z].dirty)
+	{
+		// write the line back to memory or next cache
+		if (nextCache)
+			nextCache->WRITELINE(slot[n][z].tag & ADDRESSMASK, slot[n][z]);
+		else
+			memory->WRITE(slot[n][z].tag & ADDRESSMASK, slot[n][z]);
+		// update memory access cost
+	}
+
+	//copy entire cacheline
+	slot[n][z] = line;
+	slot[n][z].tag = a;
+	slot[n][z].valid = true;
+	slot[n][z].dirty = true;
+	totalCost += RAMACCESSCOST;
+	misses++;
+	slot[n][z].age = 0; //LRU
+	slot[n][z].n_uses++; //LFU
+	return;
+}
+
+
 int Cache::EVICTION(int n)
 {
 	int i;
@@ -187,7 +301,7 @@ int Cache::EVICTION(int n)
 
 	#ifdef EV_LRU
 		int max = 0;
-		for (int t = 0; t < NWAY; t++)
+		for (int t = 0; t < NWAY1; t++)
 		{
 			if (slot[n][t].age > max)
 			{
@@ -220,6 +334,11 @@ int Cache::EVICTION(int n)
 			}
 		}
 	#endif
+#ifdef EV_CONST
+		{
+			i = 0;
+		}
+#endif
 
 	return i;
 

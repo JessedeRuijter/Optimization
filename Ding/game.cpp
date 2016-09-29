@@ -9,7 +9,9 @@ void Game::Init()
 {
 	// instantiate simulated memory and cache
 	memory = new Memory( 1024 * 1024 ); // allocate 1MB
-	cache = new Cache( memory );
+	cache3 = new Cache(memory, L3CACHESIZE, NWAY3, SETMASK3);
+	cache2 = new Cache(memory, L2CACHESIZE, NWAY2, SETMASK12, cache3);
+	cache1 = new Cache(memory, L1CACHESIZE, NWAY1, SETMASK12);
 	// intialize fractal algorithm
 	srand( 1000 );
 	Set( 0, 0, IRand( 255 ) );
@@ -27,13 +29,13 @@ void Game::Init()
 void Game::Set( int x, int y, byte value )
 {
 	address a = x + y * 513;
-	cache->WRITE(a, value);
+	cache1->WRITE(a, value);
 	m[a] = value;
 }
 byte Game::Get( int x, int y )
 {
 	address a = x + y * 513;
-	return cache->READ( a );	
+	return cache1->READ( a );	
 }
 
 // -----------------------------------------------------------
@@ -73,14 +75,14 @@ void Game::Tick( float dt )
 		Subdivide( x1, y1, x2, y2, task[taskPtr].scale );
 	}
 	// report on memory access cost (134M before your improvements :) )
-	printf( "total memory access cost: %iM cycles\n", cache->totalCost / 1000000);
+	printf( "total memory access cost: %iM cycles\n", cache1->totalCost / 1000000);
 	//printf("hits: %i \n", cache->hits);
 	// visualize current state
 	// artificial RAM access delay and cost counting are disabled here
-	memory->artificialDelay = false, c = cache->totalCost;
+	memory->artificialDelay = false, c = cache1->totalCost;
 	for (int y = 0; y < 513; y++) for (int x = 0; x < 513; x++)
 		screen->Plot(x + 140, y + 60, GREY(m[x + y * 513]));
-	memory->artificialDelay = true, cache->totalCost = c;
+	memory->artificialDelay = true, cache1->totalCost = c;
 }
 
 // -----------------------------------------------------------
@@ -89,5 +91,7 @@ void Game::Tick( float dt )
 void Game::Shutdown()
 {
 	delete memory;
-	delete cache;
+	delete cache1;
+	delete cache2;
+	delete cache3;
 }

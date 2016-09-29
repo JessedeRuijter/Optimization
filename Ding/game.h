@@ -36,7 +36,9 @@ public:
 private:
 	Surface* screen;
 	Memory* memory;
-	Cache* cache;
+	Cache* cache1;
+	Cache* cache2;
+	Cache* cache3;
 	Task task[512];
 	int taskPtr, c;
 };
