@@ -36,8 +36,7 @@ CacheLine Memory::READ( address a )
 void Memory::WRITE( address a, CacheLine& line )
 {
 	// verify that the requested address is the start of a cacheline in memory
-//	_ASSERT( (a & OFFSETMASK) == 0 );
-	int i = a & OFFSETMASK;
+	_ASSERT( (a & OFFSETMASK) == 0 );
 	// simulate the slowness of RAM
 //	if (artificialDelay) delay();
 	// write the supplied data to memory
@@ -89,17 +88,20 @@ Cache::~Cache()
 // TODO: minimize calls to memory->READ using caching
 byte Cache::READ( address a )
 {
+	byte test = memory->READ(a & ADDRESSMASK).value[a & OFFSETMASK];
+	byte ding;
 	int n = (a & SETMASK) >> 6;
 	for (int i = 0; i < NWAY; i++)
 	{
 		if ((slot[n][i].tag & ADDRESSMASK) == (a & ADDRESSMASK))
 		{
 			totalCost += L1ACCESSCOST; hits++;
-			byte ding = slot[n][i].value[a & OFFSETMASK];
+			ding = slot[n][i].value[a & OFFSETMASK];
 			return ding;
 		}
 	}
-
+	//if (test != ding)
+	//	int blabla = 5;
 	// request a full line from memory
 	CacheLine line = memory->READ( a & ADDRESSMASK );
 	// return the requested byte
@@ -116,13 +118,6 @@ byte Cache::READ( address a )
 // TODO: minimize calls to memory->WRITE using caching
 void Cache::WRITE(address a, byte value)
 {
-	// request a full line from memory
-	CacheLine line = memory->READ(a & ADDRESSMASK);
-
-	line.value[a & OFFSETMASK] = value;
-	// write the line back to memory
-	memory->WRITE(a & ADDRESSMASK, line);
-
 	int n = (a & SETMASK) >> 6;
 	for (int i = 0; i < NWAY; i++)
 	{
@@ -149,23 +144,22 @@ void Cache::WRITE(address a, byte value)
 
 	int z = EVICTION(n);
 
-	
-	// change the byte at the correct offset
+	// request a full line from memory
+	CacheLine line = memory->READ(a & ADDRESSMASK);
+
 	if (slot[n][z].dirty)
 	{
-		line.value[a & OFFSETMASK] = value;
 		// write the line back to memory
-		memory->WRITE(a & ADDRESSMASK, line);
+		memory->WRITE(slot[n][z].tag & ADDRESSMASK, slot[n][z]);
 		// update memory access cost
 		totalCost += RAMACCESSCOST;	// TODO: replace by L1ACCESSCOST for a hit
 		misses++;					// TODO: replace by hits++ for a hit
 	}
 
-	//	slot[n][z].value[a & OFFSETMASK] = value;
-	for (int i = 0; i < 64; i++)
-	{
-		slot[n][z].value[i] = line.value[i];
-	}
+	//copy entire cacheline
+	for (int t = 0; t < SLOTSIZE; t++)
+		slot[n][z].value[t] = line.value[t];
+	slot[n][z].value[a & OFFSETMASK] = value;
 	slot[n][z].tag = a;
 	slot[n][z].valid = true;
 	slot[n][z].dirty = true;
