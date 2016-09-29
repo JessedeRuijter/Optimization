@@ -3,9 +3,11 @@
 #define L1CACHESIZE		8192					// total L1$ size, in bytes
 #define L2CACHESIZE		16384					// total L2$ size, in bytes
 #define L3CACHESIZE		65536					// total L3$ size, in bytes
-#define SLOTSIZE		8						// cache slot size, in bytes
+#define SLOTSIZE		64						// cache slot size, in bytes
+#define NWAY			4						// >>>>>>>N<<<<<-way cache
 #define ADDRESSMASK		(0x1000000 - SLOTSIZE)	// used for masking out lowest log2(SLOTSIZE) bits
 #define OFFSETMASK		(SLOTSIZE - 1)			// used for masking out bits above log2(SLOTSIZE)
+#define SETMASK			(0x7C0)			    // used for masking out set bits (to do: make variable)
 #define RAMACCESSCOST	110
 #define L1ACCESSCOST	8
 #define L2ACCESSCOST	16
@@ -15,7 +17,11 @@ typedef unsigned int address;
 
 struct CacheLine
 {
+	byte age = 0;
+	uint tag;
 	byte value[SLOTSIZE];
+	bool dirty = false;
+	bool valid = false;
 };
 
 class Memory
@@ -41,9 +47,10 @@ public:
 	// methods
 	byte READ( address a );
 	void WRITE( address a, byte );
+	int EVICTION(int n);
 	// TODO: READ/WRITE functions for (aligned) 16 and 32-bit values
 	// data
-	CacheLine* slot;
+	CacheLine **slot;
 	Memory* memory;
 	int hits, misses, totalCost;
 };

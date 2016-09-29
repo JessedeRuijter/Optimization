@@ -1,5 +1,7 @@
 #include "template.h"
 
+unsigned char m[513 * 513];
+
 // -----------------------------------------------------------
 // Initialize the application
 // -----------------------------------------------------------
@@ -25,7 +27,8 @@ void Game::Init()
 void Game::Set( int x, int y, byte value )
 {
 	address a = x + y * 513;
-	cache->WRITE( a, value );
+	cache->WRITE(a, value);
+	m[a] = value;
 }
 byte Game::Get( int x, int y )
 {
@@ -70,12 +73,13 @@ void Game::Tick( float dt )
 		Subdivide( x1, y1, x2, y2, task[taskPtr].scale );
 	}
 	// report on memory access cost (134M before your improvements :) )
-	printf( "total memory access cost: %iM cycles\n", cache->totalCost / 1000000 );
+	//printf( "total memory access cost: %iM cycles\n", cache->totalCost / 1000000);
+	printf("hits: %i \n", cache->hits);
 	// visualize current state
 	// artificial RAM access delay and cost counting are disabled here
 	memory->artificialDelay = false, c = cache->totalCost;
-	for( int y = 0; y < 513; y++ ) for( int x = 0; x < 513; x++ ) 
-		screen->Plot( x + 140, y + 60, GREY( Get( x, y ) ) );
+	for (int y = 0; y < 513; y++) for (int x = 0; x < 513; x++)
+		screen->Plot(x + 140, y + 60, GREY(m[x + y * 513]));
 	memory->artificialDelay = true, cache->totalCost = c;
 }
 
