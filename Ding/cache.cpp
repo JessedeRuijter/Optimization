@@ -61,20 +61,15 @@ void Memory::WRITE( address a, CacheLine& line )
 
 // constructor
 //128 slots in the cache
-Cache::Cache(Memory* mem, int size, int Nway, int SetMask, Cache* c)
+Cache::Cache(Memory* mem, int size, int Nway, int SetMask, int Cost, Cache* c)
 {
 	setMask = SetMask;
 	nway = Nway;
+	cost = Cost;
 	slot = new CacheLine*[size / SLOTSIZE / nway];
 	for (int i = 0; i < size / SLOTSIZE / nway; i++)
 	{
 		slot[i] = new CacheLine[nway];
-		for (int j = 0; j < nway; j++)
-		{
-			for (int t = 0; t < SLOTSIZE; t++)
-				slot[i][j].value[t] = 0;
-		}
-	   // memset(slot[i], 0, NWAY);
 	}
 	memory = mem;
 	nextCache = c;
@@ -96,7 +91,7 @@ byte Cache::READ( address a )
 			slot[n][i].age++; //LRU
 		if ((slot[n][i].tag & ADDRESSMASK) == (a & ADDRESSMASK))
 		{
-			totalCost += L1ACCESSCOST; hits++;
+			totalCost += cost; hits++;
 			slot[n][i].age = 0; //LRU
 			slot[n][i].n_uses++; //LFU
 			return slot[n][i].value[a & OFFSETMASK];
@@ -107,18 +102,18 @@ byte Cache::READ( address a )
 	CacheLine line;
 	byte returnValue;
 	if (nextCache)
+	{
 		returnValue = nextCache->READ(a);
+	}
 	else //read from memory
 	{
 		line = memory->READ(a & ADDRESSMASK);
 		returnValue = line.value[a & OFFSETMASK];
+		totalCost += RAMACCESSCOST;
 	}
 
 	WRITE(a, returnValue);
-
-	// update memory access cost
-	totalCost += RAMACCESSCOST;	// TODO: replace by L1ACCESSCOST for a hit
-	misses++;					// TODO: replace by hits++ for a hit
+	misses++;
 	return returnValue;
 }
 
@@ -131,7 +126,7 @@ CacheLine Cache::READLINE(address a)
 		slot[n][i].age++; //LRU
 		if ((slot[n][i].tag & ADDRESSMASK) == (a & ADDRESSMASK))
 		{
-			totalCost += L1ACCESSCOST; hits++;
+			totalCost += cost; hits++;
 			slot[n][i].age = 0; //LRU
 			slot[n][i].n_uses++; //LFU
 			return slot[n][i];
@@ -141,15 +136,17 @@ CacheLine Cache::READLINE(address a)
 	// Read from next cache if exists, otherwise from memory
 	CacheLine line;
 	if (nextCache)
+	{
 		line = nextCache->READLINE(a);
+	}
 	else
+	{
 		line = memory->READ(a & ADDRESSMASK);
+		totalCost += RAMACCESSCOST;
+	}
 
 	WRITELINE(a, line);
-
-	// update memory access cost
-	totalCost += RAMACCESSCOST;	// TODO: replace by L1ACCESSCOST for a hit
-	misses++;					// TODO: replace by hits++ for a hit
+	misses++;
 	return line;
 }
 
@@ -169,7 +166,7 @@ void Cache::WRITE(address a, byte value)
 			{
 				slot[n][i].value[a & OFFSETMASK] = value;
 				slot[n][i].dirty = true;
-				totalCost += L1ACCESSCOST; hits++;
+				totalCost += cost; hits++;
 				slot[n][i].age = 0; //LRU
 				slot[n][i].n_uses++; //LFU
 				return;
@@ -196,7 +193,7 @@ void Cache::WRITE(address a, byte value)
 
 			slot[n][i].valid = true;
 			slot[n][i].dirty = true;
-			totalCost += L1ACCESSCOST; hits++;
+			totalCost += cost; hits++;
 			slot[n][i].age = 0; //LRU
 			slot[n][i].n_uses++; //LFU
 			return;
@@ -209,9 +206,14 @@ void Cache::WRITE(address a, byte value)
 	{
 		// write the line back to memory or next cache if dirty
 		if (nextCache)
+		{
 			nextCache->WRITELINE(slot[n][z].tag & ADDRESSMASK, slot[n][z]);
+		}
 		else
+		{
 			memory->WRITE(slot[n][z].tag & ADDRESSMASK, slot[n][z]);
+			totalCost += RAMACCESSCOST;
+		}
 		// update memory access cost
 	}
 
@@ -222,7 +224,6 @@ void Cache::WRITE(address a, byte value)
 	slot[n][z].tag = a;
 	slot[n][z].valid = true;
 	slot[n][z].dirty = true;
-	totalCost += RAMACCESSCOST;
 	misses++;
 	slot[n][z].age = 0; //LRU
 	slot[n][z].n_uses++; //LFU
@@ -230,7 +231,7 @@ void Cache::WRITE(address a, byte value)
 }
 
 //write an entire line to cache
-void Cache::WRITELINE(address a, CacheLine& line)
+void Cache::WRITELINE(address a, CacheLine& value)
 {
 	int n = (a & setMask) >> 6;
 	for (int i = 0; i < nway; i++)
@@ -241,9 +242,10 @@ void Cache::WRITELINE(address a, CacheLine& line)
 		if (slot[n][i].valid){
 			if ((slot[n][i].tag & ADDRESSMASK) == (a & ADDRESSMASK))
 			{
-				slot[n][i] = line;
+				for (int t = 0; t < SLOTSIZE; t++)
+					slot[n][i].value[t] = value.value[t];
 				slot[n][i].dirty = true;
-				totalCost += L1ACCESSCOST; hits++;
+				totalCost += cost; hits++;
 				slot[n][i].age = 0; //LRU
 				slot[n][i].n_uses++; //LFU
 				return;
@@ -254,11 +256,12 @@ void Cache::WRITELINE(address a, CacheLine& line)
 	for (int i = 0; i < nway; i++)
 	{
 		if (!slot[n][i].valid){
-			slot[n][i] = line;
+			for (int t = 0; t < SLOTSIZE; t++)
+				slot[n][i].value[t] = value.value[t];
 			slot[n][i].tag = a;
 			slot[n][i].valid = true;
 			slot[n][i].dirty = true;
-			totalCost += L1ACCESSCOST; hits++;
+			totalCost += cost; hits++;
 			slot[n][i].age = 0; //LRU
 			slot[n][i].n_uses++; //LFU
 			return;
@@ -278,18 +281,23 @@ void Cache::WRITELINE(address a, CacheLine& line)
 	{
 		// write the line back to memory or next cache
 		if (nextCache)
+		{
 			nextCache->WRITELINE(slot[n][z].tag & ADDRESSMASK, slot[n][z]);
+		}
 		else
+		{
 			memory->WRITE(slot[n][z].tag & ADDRESSMASK, slot[n][z]);
+			totalCost += RAMACCESSCOST;
+		}
 		// update memory access cost
 	}
 
 	//copy entire cacheline
-	slot[n][z] = line;
+	for (int t = 0; t < SLOTSIZE; t++)
+		slot[n][z].value[t] = value.value[t];
 	slot[n][z].tag = a;
 	slot[n][z].valid = true;
 	slot[n][z].dirty = true;
-	totalCost += RAMACCESSCOST;
 	misses++;
 	slot[n][z].age = 0; //LRU
 	slot[n][z].n_uses++; //LFU

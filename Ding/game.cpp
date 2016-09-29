@@ -9,9 +9,9 @@ void Game::Init()
 {
 	// instantiate simulated memory and cache
 	memory = new Memory( 1024 * 1024 ); // allocate 1MB
-	cache3 = new Cache(memory, L3CACHESIZE, NWAY3, SETMASK3);
-	cache2 = new Cache(memory, L2CACHESIZE, NWAY2, SETMASK12, cache3);
-	cache1 = new Cache(memory, L1CACHESIZE, NWAY1, SETMASK12);
+	cache3 = new Cache(memory, L3CACHESIZE, NWAY3, SETMASK3, L3ACCESSCOST);
+	cache2 = new Cache(memory, L2CACHESIZE, NWAY2, SETMASK12, L2ACCESSCOST, cache3);
+	cache1 = new Cache(memory, L1CACHESIZE, NWAY1, SETMASK12, L1ACCESSCOST, cache2);
 	// intialize fractal algorithm
 	srand( 1000 );
 	Set( 0, 0, IRand( 255 ) );

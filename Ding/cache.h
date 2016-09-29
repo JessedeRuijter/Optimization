@@ -16,7 +16,7 @@
 #define L2ACCESSCOST	16
 #define L3ACCESSCOST	48
 
-//Least Recently Used eviction policy, 12m cycles
+//Least Recently Used eviction policy. L1 cache: 12M cycles. L1+L2+L3 cache: 9M cycles.
 	#define EV_LRU	
 //random replacement eviction policy, 14M cycles
 	//#define EV_RANDOM
@@ -57,7 +57,7 @@ class Cache
 {
 public:
 	// ctor/dtor
-	Cache( Memory* mem, int size, int nway, int setMask, Cache* c = NULL);
+	Cache( Memory* mem, int size, int nway, int setMask, int cost, Cache* c = NULL);
 	~Cache();
 	// methods
 	byte READ( address a );
@@ -70,5 +70,5 @@ public:
 	CacheLine **slot;
 	Memory* memory;
 	Cache* nextCache;
-	int hits, misses, totalCost, setMask, nway;
+	int hits, misses, totalCost, setMask, nway, cost;
 };
