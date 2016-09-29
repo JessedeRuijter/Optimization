@@ -73,8 +73,8 @@ void Game::Tick( float dt )
 		Subdivide( x1, y1, x2, y2, task[taskPtr].scale );
 	}
 	// report on memory access cost (134M before your improvements :) )
-	//printf( "total memory access cost: %iM cycles\n", cache->totalCost / 1000000);
-	printf("hits: %i \n", cache->hits);
+	printf( "total memory access cost: %iM cycles\n", cache->totalCost / 1000000);
+	//printf("hits: %i \n", cache->hits);
 	// visualize current state
 	// artificial RAM access delay and cost counting are disabled here
 	memory->artificialDelay = false, c = cache->totalCost;

@@ -88,16 +88,16 @@ Cache::~Cache()
 // TODO: minimize calls to memory->READ using caching
 byte Cache::READ( address a )
 {
-	byte test = memory->READ(a & ADDRESSMASK).value[a & OFFSETMASK];
-	byte ding;
 	int n = (a & SETMASK) >> 6;
 	for (int i = 0; i < NWAY; i++)
 	{
+			slot[n][i].age++; //LRU
 		if ((slot[n][i].tag & ADDRESSMASK) == (a & ADDRESSMASK))
 		{
 			totalCost += L1ACCESSCOST; hits++;
-			ding = slot[n][i].value[a & OFFSETMASK];
-			return ding;
+			slot[n][i].age = 0; //LRU
+			slot[n][i].n_uses++; //LFU
+			return slot[n][i].value[a & OFFSETMASK];
 		}
 	}
 	//if (test != ding)
@@ -119,6 +119,10 @@ byte Cache::READ( address a )
 void Cache::WRITE(address a, byte value)
 {
 	int n = (a & SETMASK) >> 6;
+
+	for (int i = 0; i < NWAY; i++)
+		slot[n][i].age++; //LRU
+
 	for (int i = 0; i < NWAY; i++)
 	{
 		if (slot[n][i].valid){
@@ -126,6 +130,9 @@ void Cache::WRITE(address a, byte value)
 			{
 				slot[n][i].value[a & OFFSETMASK] = value;
 				slot[n][i].dirty = true;
+				totalCost += L1ACCESSCOST; hits++;
+				slot[n][i].age = 0; //LRU
+				slot[n][i].n_uses++; //LFU
 				return;
 			}
 		}
@@ -138,6 +145,9 @@ void Cache::WRITE(address a, byte value)
 			slot[n][i].value[a & OFFSETMASK] = value;
 			slot[n][i].valid = true;
 			slot[n][i].dirty = true;
+			totalCost += L1ACCESSCOST; hits++;
+			slot[n][i].age = 0; //LRU
+			slot[n][i].n_uses++; //LFU
 			return;
 		}
 	}
@@ -152,8 +162,6 @@ void Cache::WRITE(address a, byte value)
 		// write the line back to memory
 		memory->WRITE(slot[n][z].tag & ADDRESSMASK, slot[n][z]);
 		// update memory access cost
-		totalCost += RAMACCESSCOST;	// TODO: replace by L1ACCESSCOST for a hit
-		misses++;					// TODO: replace by hits++ for a hit
 	}
 
 	//copy entire cacheline
@@ -163,11 +171,56 @@ void Cache::WRITE(address a, byte value)
 	slot[n][z].tag = a;
 	slot[n][z].valid = true;
 	slot[n][z].dirty = true;
+	totalCost += RAMACCESSCOST;
+	misses++;
+	slot[n][z].age = 0; //LRU
+	slot[n][z].n_uses++; //LFU
 	return;
 }
 
 int Cache::EVICTION(int n)
 {
-	//int ding = rand() % 4;
-	return 3;
+	int i;
+	#ifdef EV_RANDOM
+		i = rand() % 4;
+	#endif
+
+	#ifdef EV_LRU
+		int max = 0;
+		for (int t = 0; t < NWAY; t++)
+		{
+			if (slot[n][t].age > max)
+			{
+				max = slot[n][t].age;
+				i = t;
+			}
+		}
+	#endif
+
+	#ifdef EV_MRU
+		int min = 999999;
+		for (int t = 0; t < NWAY; t++)
+		{
+			if (slot[n][t].age < min)
+			{
+				min = slot[n][t].age;
+				i = t;
+			}
+		}
+	#endif
+
+	#ifdef EV_LFU
+		int min = 999999;
+		for (int t = 0; t < NWAY; t++)
+		{
+			if (slot[n][t].n_uses < min)
+			{
+				min = slot[n][t].n_uses;
+				i = t;
+			}
+		}
+	#endif
+
+	return i;
+
 }
