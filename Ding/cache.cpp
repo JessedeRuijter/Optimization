@@ -27,7 +27,7 @@ CacheLine Memory::READ( address a )
 	// verify that the requested address is the start of a cacheline in memory
 	_ASSERT( (a & OFFSETMASK) == 0 );
 	// simulate the slowness of RAM
-//	if (artificialDelay) delay();
+	if (artificialDelay) delay();
 	// return the requested data
 	return data[a / SLOTSIZE];
 }
@@ -38,7 +38,7 @@ void Memory::WRITE( address a, CacheLine& line )
 	// verify that the requested address is the start of a cacheline in memory
 	_ASSERT( (a & OFFSETMASK) == 0 );
 	// simulate the slowness of RAM
-//	if (artificialDelay) delay();
+	if (artificialDelay) delay();
 	// write the supplied data to memory
 	data[a / SLOTSIZE] = line;
 }
@@ -90,7 +90,7 @@ Cache::~Cache()
 // read a single byte from memory
 byte Cache::READ( address a )
 {
-	int n = (a & setMask) >> 6;
+	int n = (a & setMask) >> 6; //bitshift offset bits (always 64 with slotsize 64)
 	for (int i = 0; i < nway; i++)
 	{
 			slot[n][i].age++; //LRU
@@ -177,11 +177,23 @@ void Cache::WRITE(address a, byte value)
 		}
 	}
 
+	// request a full line from memory/cache
+	CacheLine line;
+	if (nextCache)
+		line = nextCache->READLINE(a & ADDRESSMASK);
+	else
+		line = memory->READ(a & ADDRESSMASK);
+
+	//if invalid, write entire line
 	for (int i = 0; i < nway; i++)
 	{
 		if (!slot[n][i].valid){
 			slot[n][i].tag = a;
+
+			for (int t = 0; t < SLOTSIZE; t++)
+				slot[n][i].value[t] = line.value[t];
 			slot[n][i].value[a & OFFSETMASK] = value;
+
 			slot[n][i].valid = true;
 			slot[n][i].dirty = true;
 			totalCost += L1ACCESSCOST; hits++;
@@ -193,16 +205,9 @@ void Cache::WRITE(address a, byte value)
 
 	int z = EVICTION(n);
 
-	// request a full line from memory/cache
-	CacheLine line;
-	if (nextCache)
-		line = nextCache->READLINE(a & ADDRESSMASK);
-	else
-		line = memory->READ(a & ADDRESSMASK);
-
 	if (slot[n][z].dirty)
 	{
-		// write the line back to memory or next cache
+		// write the line back to memory or next cache if dirty
 		if (nextCache)
 			nextCache->WRITELINE(slot[n][z].tag & ADDRESSMASK, slot[n][z]);
 		else
