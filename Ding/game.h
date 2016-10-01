@@ -2,6 +2,7 @@
 
 #define SCRWIDTH	 800
 #define SCRHEIGHT	 640
+#define DATAHEIGHT	 100
 
 namespace Tmpl8 {
 
@@ -41,6 +42,8 @@ private:
 	Cache* cache3;
 	Task task[512];
 	int taskPtr, c;
+	//real-time visualization
+	int data[SCRWIDTH][DATAHEIGHT];
 };
 
 }; // namespace Tmpl8

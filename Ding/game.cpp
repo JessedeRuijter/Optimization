@@ -1,6 +1,8 @@
 #include "template.h"
 
 unsigned char m[513 * 513];
+Pixel colors[4] = { 0xFFFFFF, 0x0000FF, 0x00FF00, 0xFF0000 };
+int columncounter = 0;
 
 // -----------------------------------------------------------
 // Initialize the application
@@ -12,6 +14,10 @@ void Game::Init()
 	cache3 = new Cache(memory, L3CACHESIZE, NWAY3, SETMASK3, L3ACCESSCOST);
 	cache2 = new Cache(memory, L2CACHESIZE, NWAY2, SETMASK12, L2ACCESSCOST, cache3);
 	cache1 = new Cache(memory, L1CACHESIZE, NWAY1, SETMASK12, L1ACCESSCOST, cache2);
+	//instantiate data visualizer on -1 (= don't draw)
+	for (int i = 0; i < DATAHEIGHT; i++)
+		for (int n = 0; n < SCRWIDTH; n++)
+			data[n][i] = -1;
 	// intialize fractal algorithm
 	srand( 1000 );
 	Set( 0, 0, IRand( 255 ) );
@@ -83,6 +89,44 @@ void Game::Tick( float dt )
 	for (int y = 0; y < 513; y++) for (int x = 0; x < 513; x++)
 		screen->Plot(x + 140, y + 60, GREY(m[x + y * 513]));
 	memory->artificialDelay = true, cache1->totalCost = c;
+	//real-time data visulization
+#ifdef VISUALIZE
+	int total = cache1->hits + cache2->hits + cache3->hits + cache3->misses;
+	if (total != 0)
+	{
+		int ram = cache3->misses * DATAHEIGHT / total;
+		int h_cache1 = cache1->hits * DATAHEIGHT / total;
+		int h_cache2 = cache2->hits * DATAHEIGHT / total;
+		int h_cache3 = cache3->hits * DATAHEIGHT / total;
+		//fill new column of data array
+		for (int i = 0; i < DATAHEIGHT; i++)
+		{
+			if (i < h_cache1)
+				data[columncounter][i] = 1;
+			else if (i < h_cache1 + h_cache2)
+				data[columncounter][i] = 2;
+			else if (i < h_cache1+ h_cache2 + h_cache3)
+				data[columncounter][i] = 3;
+			else if (i < ram + h_cache3 + h_cache2 + h_cache1)
+				data[columncounter][i] = 0;
+		}
+		//draw data visualization. values -1..3 = nothing, memory, l1, l2, l3
+		//Colors: L1 blue, L2 green, L3 red, memory white
+		for (int y = 0; y < DATAHEIGHT; y++)
+			for (int x = 0; x < SCRWIDTH; x++)
+				if (data[(SCRWIDTH + columncounter - x) % SCRWIDTH][y] != -1)
+					screen->Plot(x, y, colors[data[(SCRWIDTH + columncounter - x) % SCRWIDTH][DATAHEIGHT - y - 1]]);
+		//reset hits and misses for next tick
+		cache1->hits = 0;
+		cache1->misses = 0;
+		cache2->hits = 0;
+		cache2->misses = 0;
+		cache3->hits = 0;
+		cache3->misses = 0;
+		//columncounter keeps track of which column to start drawing at, rather than shifting the array by 1 column every tick
+		columncounter = (columncounter + 1) % SCRWIDTH;
+	}
+#endif
 }
 
 // -----------------------------------------------------------

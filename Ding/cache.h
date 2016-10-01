@@ -27,6 +27,8 @@
 //always overwrite first slot, 43M cycles
 	//#define EV_CONST
 
+#define VISUALIZE	//real-time cache usage visualisation
+
 typedef unsigned int address;
 
 struct CacheLine
