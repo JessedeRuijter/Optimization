@@ -60,7 +60,6 @@ void Memory::WRITE( address a, CacheLine& line )
 // ------------------------------------------------------------------
 
 // constructor
-//128 slots in the cache
 Cache::Cache(Memory* mem, int size, int Nway, int SetMask, int Cost, Cache* c)
 {
 	setMask = SetMask;

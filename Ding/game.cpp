@@ -13,7 +13,7 @@ void Game::Init()
 {
 	// instantiate simulated memory and cache
 	memory = new Memory( 1024 * 1024 * 2); // allocate 2MB (1M is not enough for 32-bit read/writes)
-	//cache initialization (all 3 caches must be initialized because otherwise it crashes)
+	//cache initialization (all 3 caches must always be initialized)
 #ifdef C_ONE
 	cache3 = new Cache(memory, L3CACHESIZE, NWAY3, SETMASK3, L3ACCESSCOST);
 	cache2 = new Cache(memory, L2CACHESIZE, NWAY2, SETMASK12, L2ACCESSCOST);
@@ -114,8 +114,6 @@ void Game::Tick( float dt )
 		int y1 = task[taskPtr].y1, y2 = task[taskPtr].y2;
 		Subdivide( x1, y1, x2, y2, task[taskPtr].scale );
 	}
-	//printf("hits: %i \n", cache->hits);
-	// visualize current state
 	// artificial RAM access delay and cost counting are disabled here
 	memory->artificialDelay = false, c = cache1->totalCost;
 	for (int y = 0; y < 513; y++) for (int x = 0; x < 513; x++)
@@ -137,8 +135,8 @@ void Game::Tick( float dt )
 	cache3->cum_hits += cache3->hits;
 	cache3->cum_misses += cache3->misses;
 	// report on memory access cost (134M before your improvements :) )
-	printf("total cost: %iM cycles\t", (cache1->totalCost + cache2->totalCost + cache3->totalCost )/ 10000);
-	//report on cache hits and misses
+	printf("total cost: %iM cycles\t", (cache1->totalCost + cache2->totalCost + cache3->totalCost )/ 1000000);
+	// report on cache hits and misses
 	if (cache1->cum_hits != 0) printf("L1 hit: %f%% \t", (cache1->cum_hits * 100.0 / (cache1->cum_hits + cache1->cum_misses)));
 	if (cache2->cum_hits != 0) printf("L2 hit: %f%% \t", (cache2->cum_hits * 100.0 / (cache2->cum_hits + cache2->cum_misses)));
 	if (cache3->cum_hits != 0) printf("L3 hit: %f%% \n", (cache3->cum_hits * 100.0 / (cache3->cum_hits + cache3->cum_misses)));
@@ -151,7 +149,8 @@ void Game::Tick( float dt )
 		int h_cache1 = cache1->hits * DATAHEIGHT / total;
 		int h_cache2 = cache2->hits * DATAHEIGHT / total;
 		int h_cache3 = cache3->hits * DATAHEIGHT / total;
-		if (drawcounter % 2 == 0)
+		//skip some ticks maybe
+		if (drawcounter % DELAY == 0)
 		{
 			//fill new column of data array
 			for (int i = 0; i < DATAHEIGHT; i++)
@@ -173,11 +172,11 @@ void Game::Tick( float dt )
 				if (data[(SCRWIDTH + columncounter - x) % SCRWIDTH][y] != -1)
 					screen->Plot(SCRWIDTH-x, SCRHEIGHT - DATAHEIGHT + y, colors[data[(SCRWIDTH + columncounter - x) % SCRWIDTH][DATAHEIGHT - y - 1]]);
 		//columncounter keeps track of which column to start drawing at, rather than shifting the array by 1 column every tick
-		if (drawcounter%2==0) columncounter = (columncounter + 1) % SCRWIDTH;
+		if (drawcounter%DELAY==0) columncounter = (columncounter + 1) % SCRWIDTH;
 	}
 	drawcounter++;
 #endif
-	//reset hits and misses for next tick (because of reasons... don't ask)
+	//reset hits and misses for next tick (because of reasons)
 	cache1->hits = 0;
 	cache1->misses = 0;
 	cache2->hits = 0;
@@ -185,12 +184,6 @@ void Game::Tick( float dt )
 	cache3->hits = 0;
 	cache3->misses = 0;
 }
-/*
-inline float round(float val)
-{
-	if (val < 0) return ceil(val - 0.5);
-	return floor(val + 0.5);
-}*/
 
 // -----------------------------------------------------------
 // Clean up

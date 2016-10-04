@@ -20,6 +20,8 @@
 #define L2ACCESSCOST	16						//( + L1ACCESSCOST)
 #define L3ACCESSCOST	48						//( + L2ACCESSCOST + L1ACCESSCOST)
 
+//OPTIONS
+
 //Eviction policy (PICK ONE):
 //Least Recently Used eviction policy.
 	#define EV_LRU	
@@ -35,16 +37,17 @@
 //Real-time data visualization:
 #define VISUALIZE			//turn visualization on or off
 #define DATAHEIGHT	 100	//the height of the plotted data in pixels
+#define DELAY		 1      //Adjust the speed of the plotted data by skipping ticks (min. 1, higher = slower);
 
 //Number of caches used (PICK ONE):
 //#define C_ONE
 //#define C_TWO
 #define C_THREE
 
-//Use 8-bit, 16-bit or 32-bit data types (PICK ONE):
-//#define B8 //(default)
+//Data size: use 8-bit, 16-bit or 32-bit data types (PICK ONE):
+#define B8 //(default)
 //#define B16
-#define B32
+//#define B32
 
 typedef unsigned int address;
 
@@ -84,7 +87,7 @@ public:
 	void WRITE( address a, byte );
 	void WRITELINE(address a, CacheLine& line, int mask);
 	int EVICTION(int n);
-	// TODO: READ/WRITE functions for (aligned) 16 and 32-bit values
+	// READ/WRITE functions for (aligned) 16 and 32-bit values
 	//read/write 16-bit value
     __int16 READ16(address a);
 	void WRITE16(address a, __int16);
