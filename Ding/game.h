@@ -2,7 +2,6 @@
 
 #define SCRWIDTH	 800
 #define SCRHEIGHT	 640
-#define DATAHEIGHT	 100
 
 namespace Tmpl8 {
 
